@@ -49,3 +49,4 @@ Anpassungen
 - `PORT` (Backend) via Umgebungsvariable setzbar.
 - Optional `VITE_API_URL` im Frontend setzen, falls kein Proxy genutzt wird.
 
+"# stimmung-ding" 
