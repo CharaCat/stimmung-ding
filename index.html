@@ -1,0 +1,972 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Stimmungsbild – Dein Stimmungs‑Tracker</title>
+  <!-- React und Chart.js aus CDN laden -->
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.umd.min.js"></script>
+  <!-- Für Zeitskala: Adapter für Date‑Objekte -->
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0"></script>
+  <!-- Babel für JSX Transformation -->
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <!-- Grundlegende Gestaltung inspiriert vom Originalprojekt mit dunklem Hintergrund und Neon‑Highlights -->
+  <style>
+    :root {
+      --bg: #0e0f12;
+      --card: #151821;
+      --muted: #9aa3b2;
+      --text: #e6ebf3;
+      --primary: #10b981;
+      --accent: #6366f1;
+      --accent2: #22d3ee;
+      --accent3: #10b981;
+      --glow: rgba(99, 102, 241, 0.45);
+      --glow-strong: rgba(99, 102, 241, 0.75);
+      --glow-green: rgba(16, 185, 129, 0.45);
+      --ring: rgba(16, 185, 129, 0.35);
+    }
+    * {
+      box-sizing: border-box;
+    }
+    html, body, #root {
+      height: 100%;
+    }
+    body {
+      margin: 0;
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+      color: var(--text);
+      background-color: var(--bg);
+      /* Mehrschichtiger radialer Verlauf wie im Original */
+      background-image:
+        radial-gradient(1200px 600px at 10% -10%, #1a1f2b, var(--bg) 60%),
+        radial-gradient(900px 500px at 120% 10%, #161a2b, transparent 40%),
+        radial-gradient(800px 400px at 50% 120%, rgba(16,185,129,0.08), transparent 60%);
+      background-repeat: no-repeat;
+      background-size: cover, cover, cover;
+      animation: bgMove 50s ease-in-out infinite;
+    }
+    @keyframes bgMove {
+      0%   { background-position: 0% 0%, 0% 0%, 50% 100%; }
+      50%  { background-position: 30% -10%, 100% 0%, 48% 120%; }
+      100% { background-position: 0% 0%, 0% 0%, 50% 100%; }
+    }
+    .wrapper {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 32px 20px 48px;
+      display: flex;
+      flex-direction: column;
+      gap: 32px;
+    }
+    header {
+      text-align: center;
+      margin-bottom: 12px;
+    }
+    header h1 {
+      margin: 0;
+      font-size: 2rem;
+      letter-spacing: 0.4px;
+      background: linear-gradient(90deg, var(--accent), var(--accent2), var(--accent3));
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+      background-size: 200% 100%;
+      animation: headGradient 8s ease-in-out infinite;
+      text-shadow: 0 1px 10px rgba(0,0,0,0.35), 0 0 14px var(--glow);
+    }
+    @keyframes headGradient {
+      0% { background-position: 0% 50%; }
+      50% { background-position: 100% 50%; }
+      100% { background-position: 0% 50%; }
+    }
+    .subtitle {
+      margin-top: 6px;
+      color: var(--muted);
+      font-size: 0.95rem;
+      background: linear-gradient(90deg, rgba(230,235,243,0.85), rgba(230,235,243,0.65));
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+    }
+    .card {
+      background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.00));
+      padding: 20px;
+      border-radius: 14px;
+      border: 1px solid rgba(255,255,255,0.06);
+      box-shadow: 0 12px 36px rgba(0,0,0,0.32), 0 0 26px var(--glow);
+      animation: pulseGlow 8s ease-in-out infinite;
+      backdrop-filter: blur(6px) saturate(120%);
+      transform: translateZ(0);
+      position: relative;
+    }
+    @keyframes pulseGlow {
+      0%   { box-shadow: 0 12px 36px rgba(0,0,0,0.32), 0 0 26px var(--glow); }
+      50%  { box-shadow: 0 12px 36px rgba(0,0,0,0.32), 0 0 26px var(--glow-strong); }
+      100% { box-shadow: 0 12px 36px rgba(0,0,0,0.32), 0 0 26px var(--glow); }
+    }
+    .card:hover {
+      box-shadow: 0 14px 44px rgba(0,0,0,0.36), 0 0 36px var(--glow-strong), 0 0 18px var(--glow-green) inset;
+      border-color: rgba(255,255,255,0.12);
+      transform: perspective(800px) rotateX(1deg) rotateY(-1deg) translateY(-2px);
+    }
+    form {
+      display: grid;
+      gap: 14px;
+      margin-top: 4px;
+    }
+    .slider-row {
+      display: grid;
+      grid-template-columns: auto 1fr auto auto;
+      gap: 12px;
+      align-items: center;
+    }
+    .range-label {
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+    .score-pill {
+      color: #0c0e13;
+      font-weight: 700;
+      padding: 6px 10px;
+      border-radius: 999px;
+      min-width: 42px;
+      text-align: center;
+      box-shadow: 0 0 0 0 rgba(16,185,129,0.25);
+      animation: pillBreath 3.2s ease-in-out infinite;
+    }
+    @keyframes pillBreath {
+      0% { box-shadow: 0 0 0 0 rgba(16,185,129,0.25); }
+      50% { box-shadow: 0 0 0 8px rgba(16,185,129,0.0); }
+      100% { box-shadow: 0 0 0 0 rgba(16,185,129,0.25); }
+    }
+    input[type="range"] {
+      width: 100%;
+    }
+    input[type="range"]:focus {
+      outline: none;
+      filter: drop-shadow(0 0 8px var(--glow-strong));
+    }
+    input[type="range"]::-webkit-slider-thumb {
+      box-shadow: 0 0 0 3px rgba(255,255,255,0.15), 0 0 10px var(--glow-green);
+    }
+    input[type="range"]::-moz-range-thumb {
+      box-shadow: 0 0 0 3px rgba(255,255,255,0.15), 0 0 10px var(--glow-green);
+    }
+    textarea, input[type="datetime-local"], input[type="text"] {
+      width: 100%;
+      padding: 10px 12px;
+      border-radius: 10px;
+      border: 1px solid rgba(255,255,255,0.08);
+      background: rgba(255,255,255,0.03);
+      color: var(--text);
+      resize: vertical;
+      transition: box-shadow .2s ease, border-color .2s ease, transform .1s ease;
+    }
+    textarea:focus, input[type="datetime-local"]:focus, input[type="text"]:focus {
+      outline: none;
+      border-color: var(--ring);
+      box-shadow: 0 0 0 4px var(--ring), 0 0 22px rgba(99,102,241,0.25);
+    }
+    button {
+      height: 40px;
+      padding: 0 14px;
+      border-radius: 10px;
+      border: 1px solid rgba(255,255,255,0.08);
+      background: rgba(255,255,255,0.03);
+      color: var(--text);
+      cursor: pointer;
+      transition: transform .1s ease, box-shadow .15s ease;
+      position: relative;
+      overflow: hidden;
+    }
+    button.primary {
+      background: linear-gradient(135deg, var(--accent2), var(--accent3));
+      color: #04110b;
+      border-color: transparent;
+      font-weight: 700;
+    }
+    button.primary:hover, button.primary:focus {
+      box-shadow: 0 0 0 4px var(--ring), 0 0 22px var(--glow-strong);
+      transform: translateY(-1px);
+    }
+    button.ghost {
+      background: transparent;
+    }
+    button:disabled {
+      opacity: 0.7;
+      cursor: not-allowed;
+    }
+    button::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(circle at center, rgba(255,255,255,0.35), transparent 60%);
+      transform: scale(0);
+      opacity: 0;
+      transition: transform .35s ease, opacity .35s ease;
+      pointer-events: none;
+    }
+    button:active::after {
+      transform: scale(2.5);
+      opacity: 0.35;
+      transition: none;
+    }
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+    .stat {
+      background: rgba(255,255,255,0.02);
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 10px;
+      padding: 12px;
+      position: relative;
+      overflow: hidden;
+    }
+    .stat::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(120deg, transparent, rgba(255,255,255,0.06), transparent);
+      transform: translateX(-120%);
+      animation: shimmer 3.2s infinite;
+    }
+    @keyframes shimmer {
+      0% { transform: translateX(-120%); }
+      60% { transform: translateX(120%); }
+      100% { transform: translateX(120%); }
+    }
+    .stat-label {
+      color: var(--muted);
+      font-size: 0.85rem;
+    }
+    .stat-value {
+      font-weight: 800;
+      font-size: 1.25rem;
+      margin-top: 4px;
+      text-shadow: 0 0 12px rgba(16,185,129,0.25);
+    }
+    .segmented {
+      background: rgba(255,255,255,0.06);
+      padding: 4px;
+      border-radius: 999px;
+      display: inline-flex;
+      gap: 4px;
+      border: 1px solid rgba(255,255,255,0.08);
+      box-shadow: inset 0 0 12px rgba(0,0,0,0.12);
+    }
+    .segmented .seg {
+      background: transparent;
+      border: none;
+      padding: 6px 10px;
+      border-radius: 999px;
+      color: var(--text);
+      opacity: 0.8;
+      transition: transform .15s ease, box-shadow .2s ease;
+    }
+    .segmented .seg:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 0 0 1px rgba(255,255,255,0.08), 0 0 10px rgba(255,255,255,0.06) inset;
+    }
+    .segmented .seg.on {
+      background: rgba(16,185,129,0.22);
+      color: #8ff0c9;
+      opacity: 1;
+      box-shadow: 0 0 0 2px rgba(16,185,129,0.25), 0 0 12px rgba(16,185,129,0.35);
+      position: relative;
+    }
+    .segmented .seg.on::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      border-radius: inherit;
+      box-shadow: 0 0 0 2px rgba(34,211,238,0.25);
+      background: linear-gradient(90deg, rgba(34,211,238,0.15), transparent, rgba(34,211,238,0.15));
+      background-size: 200% 100%;
+      background-position: 0 0;
+      animation: tabSheen 6s linear infinite;
+      z-index: -1;
+    }
+    @keyframes tabSheen {
+      0% { background-position: 0 0; }
+      100% { background-position: 200% 0; }
+    }
+    .entries {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+      display: grid;
+      gap: 8px;
+    }
+    .entry {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 10px;
+      border-radius: 10px;
+      background: rgba(255,255,255,0.02);
+      border: 1px solid rgba(255,255,255,0.06);
+      backdrop-filter: blur(4px) saturate(120%);
+      transition: transform .2s ease, box-shadow .2s ease;
+    }
+    .entry:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 10px 26px rgba(0,0,0,0.28), 0 0 24px rgba(99,102,241,0.35);
+    }
+    .entry-left {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+    }
+    .entry-score {
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      font-weight: 800;
+      box-shadow: inset 0 0 0 2px rgba(255,255,255,0.06), 0 0 18px rgba(99,102,241,0.25);
+      position: relative;
+      overflow: hidden;
+    }
+    .entry-score::after {
+      content: '';
+      position: absolute;
+      top: -30%; left: -30%;
+      width: 160%; height: 160%;
+      background: conic-gradient(from 0deg, rgba(255,255,255,0.15), transparent 40% 60%, rgba(255,255,255,0.12));
+      transform: rotate(0deg);
+      animation: ringSpin 6s linear infinite;
+      mix-blend-mode: screen;
+    }
+    @keyframes ringSpin { to { transform: rotate(360deg); } }
+    .entry-meta {
+      color: var(--muted);
+      font-size: 0.85rem;
+    }
+    .entry-note { margin-top: 3px; }
+    .entry.selected {
+      border-color: rgba(99,102,241,0.5);
+      box-shadow: 0 0 0 2px rgba(99,102,241,0.25), 0 0 22px rgba(99,102,241,0.25);
+      transform: translateY(-1px);
+    }
+    .entry.featured {
+      position: relative;
+    }
+    .entry.featured::before {
+      content: '';
+      position: absolute;
+      inset: -1px;
+      border-radius: inherit;
+      padding: 1px;
+      background: linear-gradient(90deg, rgba(99,102,241,0.45), rgba(34,211,238,0.35), rgba(16,185,129,0.35));
+      background-size: 200% 100%;
+      background-position: 0 0;
+      -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+      -webkit-mask-composite: xor;
+      mask-composite: exclude;
+      animation: sweepBorder 7s linear infinite;
+      pointer-events: none;
+    }
+    @keyframes sweepBorder {
+      0% { background-position: -150% 0; }
+      100% { background-position: 250% 0; }
+    }
+    .chart-wrap {
+      width: 100%;
+      height: 72vh;
+      display: flex;
+      justify-content: center;
+    }
+    .chart-card {
+      width: 100%;
+      max-width: 1000px;
+      position: relative;
+      transition: transform .25s ease;
+    }
+    .chart-card:hover {
+      transform: perspective(1000px) rotateX(1deg) rotateY(-1deg);
+    }
+    .chart-card canvas {
+      filter: drop-shadow(0 0 10px var(--glow)) drop-shadow(0 0 18px var(--glow-strong));
+      animation: canvasPulse 10s ease-in-out infinite;
+    }
+    @keyframes canvasPulse {
+      0%   { filter: drop-shadow(0 0 8px var(--glow)) drop-shadow(0 0 14px var(--glow)); }
+      50%  { filter: drop-shadow(0 0 14px var(--glow-strong)) drop-shadow(0 0 26px var(--glow-strong)); }
+      100% { filter: drop-shadow(0 0 10px var(--glow)) drop-shadow(0 0 18px var(--glow)); }
+    }
+    .chart-actions {
+      position: absolute;
+      top: -6px;
+      right: 0;
+      display: flex;
+      gap: 8px;
+      z-index: 2;
+    }
+    .chart-actions button {
+      backdrop-filter: blur(4px);
+    }
+    .footer {
+      margin-top: 22px;
+      color: var(--muted);
+      text-align: center;
+      font-size: 0.9rem;
+      text-shadow: 0 0 12px rgba(99,102,241,0.25);
+      animation: softFlicker 7s ease-in-out infinite;
+    }
+    @keyframes softFlicker {
+      0%, 100% { text-shadow: 0 1px 10px rgba(0,0,0,0.35), 0 0 14px var(--glow); }
+      50% { text-shadow: 0 2px 12px rgba(0,0,0,0.40), 0 0 22px var(--glow-strong); }
+    }
+    .error { color: #fca5a5; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    // Mood Tracker React Komponente
+    const { useState, useEffect, useRef, useMemo } = React;
+    
+    // Hilfsfunktion: Stimmungsklasse in Farbe umrechnen (-10 rot -> +10 grün)
+    function colorForScore(s) {
+      const t = (s + 10) / 20;
+      const r = Math.round(255 * (1 - t));
+      const g = Math.round(180 * t + 60 * (1 - t));
+      return `rgb(${r}, ${g}, 100)`;
+    }
+    
+    // Datum/Uhrzeit in local datetime‑String (YYYY-MM-DDTHH:mm) umwandeln
+    function pad(n) {
+      return String(n).padStart(2, '0');
+    }
+    function formatLocalDateTime(d) {
+      const y = d.getFullYear();
+      const m = pad(d.getMonth() + 1);
+      const day = pad(d.getDate());
+      const hh = pad(d.getHours());
+      const mm = pad(d.getMinutes());
+      return `${y}-${m}-${day}T${hh}:${mm}`;
+    }
+    
+    function defaultDaysFor(view) {
+      if (view === 'month') return 24 * 30; // ~2 Jahre
+      if (view === 'week') return 26 * 7;   // ~6 Monate
+      return 60; // 60 Tage für Tagesansicht
+    }
+    
+    // Gruppiert Einträge für Statistiken je nach Ansicht
+    function aggregateEntries(entries, view) {
+      const groups = {};
+      for (const e of entries) {
+        let key;
+        const d = new Date(e.created_ts);
+        if (view === 'day') {
+          d.setHours(0,0,0,0);
+          key = d.getTime();
+        } else if (view === 'week') {
+          // Montag als Wochenanfang (falls Sonntag (0) -> 6 Tage zurück, sonst Tag-1)
+          const day = d.getDay();
+          const diff = (day === 0 ? 6 : day - 1);
+          d.setDate(d.getDate() - diff);
+          d.setHours(0,0,0,0);
+          key = d.getTime();
+        } else if (view === 'month') {
+          d.setDate(1);
+          d.setHours(0,0,0,0);
+          key = d.getTime();
+        } else {
+          key = e.created_ts;
+        }
+        if (!groups[key]) {
+          groups[key] = [];
+        }
+        groups[key].push(e);
+      }
+      const series = [];
+      for (const k of Object.keys(groups)) {
+        const arr = groups[k];
+        const avg = arr.reduce((sum, e) => sum + e.score, 0) / arr.length;
+        series.push({ ts: Number(k), avg });
+      }
+      // sort chronologisch
+      series.sort((a,b) => a.ts - b.ts);
+      return series;
+    }
+    
+    // Statistiken berechnen
+    function computeStats(entries) {
+      if (!entries.length) return { count: 0, avg: null, min: null, max: null };
+      const count = entries.length;
+      const sum = entries.reduce((acc, e) => acc + e.score, 0);
+      const avg = sum / count;
+      let min = entries[0].score;
+      let max = entries[0].score;
+      for (const e of entries) {
+        if (e.score < min) min = e.score;
+        if (e.score > max) max = e.score;
+      }
+      return { count, avg, min, max };
+    }
+    
+    function MoodTracker() {
+      const [score, setScore] = useState(0);
+      const [note, setNote] = useState('');
+      const [when, setWhen] = useState(formatLocalDateTime(new Date()));
+      const [entries, setEntries] = useState([]);
+      const [view, setView] = useState('day');
+      const [stats, setStats] = useState({ count: 0, avg: null, min: null, max: null });
+      const [range, setRange] = useState(null); // { fromTs, toTs }
+      const [selected, setSelected] = useState(null);
+      const canvasRef = useRef(null); // Referenz zum Canvas für Chart.js
+      const chartRef = useRef(null);   // Chart.js Instanz
+      const panStartRef = useRef(null);
+
+      // Beim Laden: gespeicherte Einträge aus dem localStorage laden
+      useEffect(() => {
+        try {
+          const raw = JSON.parse(localStorage.getItem('moodEntries') || '[]');
+          if (Array.isArray(raw)) {
+            // Nur valide Einträge übernehmen: es muss ein numerischer created_ts existieren
+            const filtered = raw.filter(e => typeof e?.created_ts === 'number' && Number.isFinite(e.created_ts));
+            filtered.sort((a,b) => a.created_ts - b.created_ts);
+            setEntries(filtered);
+            // Falls ungültige Einträge vorhanden waren, speichern wir die bereinigte Liste zurück
+            if (filtered.length !== raw.length) {
+              localStorage.setItem('moodEntries', JSON.stringify(filtered));
+            }
+          }
+        } catch {}
+      }, []);
+
+      // Aktualisiere Statistiken, wenn Einträge, Ansicht oder Bereich sich ändern
+      useEffect(() => {
+        refreshData(view, range);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+      }, [entries, view, range]);
+
+      // Hilfsfunktion: Daten nach aktuellem Bereich/Ansicht filtern und Stats berechnen
+      function refreshData(nextView, nextRange) {
+        if (!entries || !entries.length) {
+          setStats({ count: 0, avg: null, min: null, max: null });
+          return;
+        }
+        let fromTs, toTs;
+        if (nextRange && typeof nextRange.fromTs === 'number' && typeof nextRange.toTs === 'number') {
+          fromTs = nextRange.fromTs;
+          toTs = nextRange.toTs;
+        } else {
+          // Standardfenster: letze defaultDaysFor(view) Tage um letztes Ereignis
+          const days = defaultDaysFor(nextView);
+          const lastTs = entries[entries.length - 1].created_ts;
+          toTs = lastTs;
+          fromTs = lastTs - days * 24 * 3600 * 1000;
+        }
+        // Filter im Bereich
+        const filtered = entries.filter(e => e.created_ts >= fromTs && e.created_ts <= toTs);
+        const s = computeStats(filtered);
+        setStats(s);
+      }
+
+      // Einen neuen Eintrag hinzufügen
+      function onSubmit(e) {
+        e.preventDefault();
+        const createdVal = when ? new Date(when).getTime() : Date.now();
+        const created_ts = Number.isFinite(createdVal) ? createdVal : Date.now();
+        // ID generieren basierend auf Zeitstempel und Zufall
+        const id = `${created_ts}_${Math.random().toString(16).slice(2)}`;
+        const newEntry = { id, created_ts, score, note: note.trim() };
+        const newEntries = entries.concat([newEntry]);
+        newEntries.sort((a,b) => a.created_ts - b.created_ts);
+        setEntries(newEntries);
+        localStorage.setItem('moodEntries', JSON.stringify(newEntries));
+        setNote('');
+        setWhen(formatLocalDateTime(new Date()));
+        // Zoomfenster auf den neuen Eintrag zentrieren
+        const days = defaultDaysFor(view);
+        const halfMs = Math.max(1, Math.round(days / 2)) * 24 * 3600 * 1000;
+        const newRange = { fromTs: created_ts - halfMs, toTs: created_ts + halfMs };
+        setRange(newRange);
+      }
+
+      function onDelete(id) {
+        if (!confirm('Eintrag löschen?')) return;
+        const remaining = entries.filter(e => e.id !== id);
+        setEntries(remaining);
+        localStorage.setItem('moodEntries', JSON.stringify(remaining));
+      }
+
+      // Chart Daten vorbereiten
+      const chartData = useMemo(() => {
+        // Für Chart werden die gefilterten Einträge im aktuellen Bereich verwendet
+        let fromTs, toTs;
+        if (range && typeof range.fromTs === 'number' && typeof range.toTs === 'number') {
+          fromTs = range.fromTs;
+          toTs = range.toTs;
+        } else if (entries.length) {
+          const days = defaultDaysFor(view);
+          const lastTs = entries[entries.length - 1].created_ts;
+          toTs = lastTs;
+          fromTs = lastTs - days * 24 * 3600 * 1000;
+        }
+        // Filtere Einträge im sichtbaren Fenster
+        const filteredEntries = entries.filter(e => {
+          if (fromTs !== undefined && toTs !== undefined) {
+            return e.created_ts >= fromTs && e.created_ts <= toTs;
+          }
+          return true;
+        });
+        const pts = filteredEntries.map(e => ({ x: e.created_ts, y: e.score, note: e.note, id: e.id })).sort((a,b) => a.x - b.x);
+        // Nur rohes Dataset zeichnen, keine separate Durchschnitts-Linie – das entspricht dem Originalprojekt
+        const many = pts.length > 800;
+        const rawDataset = {
+          type: 'scatter',
+          label: 'Einträge',
+          data: pts,
+          pointRadius: many ? 1 : 3,
+          pointHoverRadius: many ? 2 : 4,
+          // Klickfläche der Punkte (wie im Originalprojekt)
+          pointHitRadius: many ? 1 : 2,
+          showLine: true,
+          cubicInterpolationMode: 'monotone',
+          tension: 0.25,
+          spanGaps: true,
+          borderWidth: 2.25,
+          borderColor: 'rgba(59,130,246,0.5)',
+          fill: true,
+          backgroundColor: (ctx) => {
+            const area = ctx.chart.chartArea;
+            if (!area) return 'rgba(99,102,241,0.08)';
+            const g = ctx.chart.ctx.createLinearGradient(0, area.top, 0, area.bottom);
+            g.addColorStop(0, 'rgba(99,102,241,0.18)');
+            g.addColorStop(1, 'rgba(16,185,129,0.06)');
+            return g;
+          },
+          pointBackgroundColor: (ctx) => colorForScore(ctx.raw?.y ?? 0),
+          segment: {
+            borderColor: (ctx) => {
+              const { p0, p1, chart } = ctx;
+              if (!p0 || !p1) return 'rgba(99,102,241,0.65)';
+              const g = chart.ctx.createLinearGradient(p0.x, p0.y, p1.x, p1.y);
+              const y0 = p0.parsed?.y ?? 0;
+              const y1 = p1.parsed?.y ?? 0;
+              g.addColorStop(0, colorForScore(y0));
+              g.addColorStop(1, colorForScore(y1));
+              return g;
+            }
+          },
+          glow: true,
+          glowColor: 'rgba(99,102,241,0.55)',
+          glowBlur: 22,
+          order: 1,
+        };
+        return { datasets: [rawDataset] };
+      }, [entries, range, view]);
+
+      // Chart Optionen konfigurieren
+      const chartOptions = useMemo(() => {
+        return {
+          responsive: true,
+          parsing: false,
+          normalized: true,
+          animation: { duration: 150, easing: 'easeOutQuad' },
+          interaction: { mode: 'nearest', intersect: false },
+          maintainAspectRatio: false,
+          onHover: (evt, activeEls, chart) => {
+            const el = evt?.native?.target;
+            const els = chart?.getElementsAtEventForMode?.(evt, 'point', { intersect: true }, true) || [];
+            if (el) el.style.cursor = els.length ? 'pointer' : 'default';
+          },
+          onClick: (evt, activeEls, chart) => {
+            const els = chart.getElementsAtEventForMode(evt, 'point', { intersect: true }, true);
+            if (!els || !els.length) { setSelected(null); return; }
+            const { datasetIndex, index } = els[0];
+            const ds = chart.data.datasets?.[datasetIndex];
+            if (!ds || ds.label !== 'Einträge') { setSelected(null); return; }
+            const pt = ds.data?.[index];
+            if (pt) setSelected({ ts: pt.x, score: pt.y, note: pt.note, id: pt.id });
+          },
+          scales: {
+            x: {
+              type: 'time',
+              time: { unit: view === 'day' ? 'day' : view === 'week' ? 'week' : 'month' },
+              ticks: { autoSkip: true, maxTicksLimit: 10 },
+              min: range?.fromTs ?? undefined,
+              max: range?.toTs ?? undefined,
+              suggestedMin: entries.length ? entries[0].created_ts - 7 * 24 * 3600 * 1000 : undefined,
+              suggestedMax: entries.length ? entries[entries.length - 1].created_ts + 7 * 24 * 3600 * 1000 : undefined,
+            },
+            y: { min: -10, max: 10, ticks: { stepSize: 5 } },
+          },
+          plugins: {
+            legend: { display: false },
+            zoom: {
+              pan: {
+                enabled: true,
+                mode: 'x',
+                threshold: 2,
+              },
+              zoom: {
+                wheel: { enabled: true, speed: 0.05 },
+                pinch: { enabled: true },
+                drag: { enabled: false },
+                mode: 'x',
+                limits: { x: { minRange: 24 * 3600 * 1000 } },
+              },
+              onPanStart: ({ chart }) => {
+                const s = chart.scales.x;
+                panStartRef.current = { min: s.min, max: s.max };
+              },
+              onZoomComplete: ({ chart }) => {
+                const s = chart.scales.x;
+                const min = s.min, max = s.max;
+                if (typeof min !== 'number' || typeof max !== 'number') return;
+                const spanDays = (max - min) / (24 * 3600 * 1000);
+                const current = view;
+                let next = current;
+                if (current === 'month' && spanDays < 90) next = 'week';
+                if (current !== 'day' && spanDays < 21) next = 'day';
+                if (current === 'day' && spanDays > 90) next = 'month';
+                else if (current === 'day' && spanDays > 45) next = 'week';
+                else if (current === 'week' && spanDays > 180) next = 'month';
+                const newRange = { fromTs: Math.round(min), toTs: Math.round(max) };
+                setRange(newRange);
+                if (next !== current) {
+                  setView(next);
+                }
+              },
+              onPanComplete: ({ chart }) => {
+                const s = chart.scales.x;
+                const min = s.min, max = s.max;
+                if (typeof min !== 'number' || typeof max !== 'number') return;
+                // Inertia wird vereinfacht: wir aktualisieren nur den Bereich und die Stats
+                const newRange = { fromTs: Math.round(min), toTs: Math.round(max) };
+                setRange(newRange);
+              },
+            },
+          },
+        };
+      }, [view, range, entries]);
+
+      // GlowPlugin registrieren: verleiht Linien und Punkten einen Schatten (wie im Original)
+      const glowPlugin = useMemo(() => {
+        return {
+          id: 'glow',
+          beforeDatasetDraw(chart, args) {
+            const ds = chart.data.datasets?.[args.index];
+            if (!ds || !ds.glow) return;
+            const ctx = chart.ctx;
+            ctx.save();
+            ctx.shadowColor = ds.glowColor || 'rgba(16,185,129,0.6)';
+            ctx.shadowBlur = ds.glowBlur ?? 14;
+            ctx.shadowOffsetX = 0;
+            ctx.shadowOffsetY = 0;
+          },
+          afterDatasetDraw(chart, args) {
+            const ds = chart.data.datasets?.[args.index];
+            if (!ds || !ds.glow) return;
+            chart.ctx.restore();
+          },
+        };
+      }, []);
+
+      // Chart initialisieren und aktualisieren
+      useEffect(() => {
+        const ChartJS = window.Chart;
+        // Zoom‑Plugin aus globalem Scope laden, falls vorhanden
+        const zoomPlugin = window.chartjsPluginZoom || window.ChartZoom || window.Zoom || window.zoomPlugin;
+        try {
+          if (zoomPlugin) {
+            ChartJS.register(zoomPlugin);
+          }
+          ChartJS.register(glowPlugin);
+        } catch (err) {
+          // Fehler beim Registrieren ignorieren
+          console?.warn?.('Chart registration error', err);
+        }
+      }, [glowPlugin]);
+
+      // Chart.js Instanz erzeugen oder aktualisieren, sobald Daten/Optionen sich ändern
+      useEffect(() => {
+        const ChartJS = window.Chart;
+        if (!canvasRef.current) return;
+        // Wenn bereits ein Chart existiert, zerstören wir ihn
+        if (chartRef.current) {
+          try { chartRef.current.destroy(); } catch (e) {}
+        }
+        // Registriere Plugins erneut (wird von Chart.js intern dedupliziert)
+        const zoomPlugin = window.chartjsPluginZoom || window.ChartZoom || window.Zoom || window.zoomPlugin;
+        if (zoomPlugin) {
+          try { ChartJS.register(zoomPlugin); } catch (e) {}
+        }
+        try { ChartJS.register(glowPlugin); } catch (e) {}
+        // Chart erstellen
+        const ctx = canvasRef.current.getContext('2d');
+        const newChart = new ChartJS(ctx, {
+          type: 'scatter',
+          data: chartData,
+          options: chartOptions,
+        });
+        chartRef.current = newChart;
+        return () => {
+          // Bei Cleanup zerstören
+          try { newChart.destroy(); } catch (e) {}
+        };
+      }, [canvasRef, chartData, chartOptions, glowPlugin]);
+
+      // Render
+      return (
+        <div className="wrapper">
+          <header className="header">
+            <h1>Stimmungsbild</h1>
+            <p className="subtitle">Dein persönliches Stimmungs‑Journal</p>
+          </header>
+          {/* Formular zum Erstellen eines Eintrags */}
+          <section className="card form-card">
+            <h2>Eintrag erstellen</h2>
+            <form onSubmit={onSubmit}>
+              <div className="slider-row">
+                <span className="range-label">-10</span>
+                <input
+                  type="range"
+                  min="-10"
+                  max="10"
+                  step="1"
+                  value={score}
+                  onChange={(e) => setScore(parseInt(e.target.value))}
+                  style={{ accentColor: colorForScore(score) }}
+                />
+                <span className="range-label">+10</span>
+                <div className="score-pill" style={{ backgroundColor: colorForScore(score) }}>{score}</div>
+              </div>
+              <textarea
+                placeholder="Kommentar oder Grund (optional)"
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+                rows={3}
+              />
+              <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr auto', gap: 12, alignItems: 'center' }}>
+                <label htmlFor="when">Datum/Zeit</label>
+                <input
+                  id="when"
+                  type="datetime-local"
+                  value={when}
+                  onChange={(e) => setWhen(e.target.value)}
+                />
+                <button type="button" className="ghost" onClick={() => setWhen(formatLocalDateTime(new Date()))}>Jetzt</button>
+              </div>
+              <button className="primary" type="submit">Speichern</button>
+            </form>
+          </section>
+          {/* Übersicht mit Statistik und Chart */}
+          <section className="card overview-card" style={{ paddingBottom: '12px' }}>
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+              <h2>Übersicht</h2>
+              <div className="segmented" role="tablist" aria-label="Ansicht">
+                <button className={view==='day' ? 'seg on' : 'seg'} onClick={() => { setView('day'); setRange(null); setSelected(null); }}>
+                  Tag
+                </button>
+                <button className={view==='week' ? 'seg on' : 'seg'} onClick={() => { setView('week'); setRange(null); setSelected(null); }}>
+                  Woche
+                </button>
+                <button className={view==='month' ? 'seg on' : 'seg'} onClick={() => { setView('month'); setRange(null); setSelected(null); }}>
+                  Monat
+                </button>
+              </div>
+              <button className="ghost" onClick={() => { try { chartRef.current?.resetZoom?.(); setRange(null); setSelected(null); } catch {} }}>Reset Zoom</button>
+            </div>
+            <div className="stats">
+              <div className="stat">
+                <div className="stat-label">Einträge</div>
+                <div className="stat-value">{stats.count ?? 0}</div>
+              </div>
+              <div className="stat">
+                <div className="stat-label">Durchschnitt</div>
+                <div className="stat-value">{stats.avg != null ? stats.avg.toFixed(2) : '–'}</div>
+              </div>
+              <div className="stat">
+                <div className="stat-label">Min</div>
+                <div className="stat-value">{stats.min != null ? stats.min : '–'}</div>
+              </div>
+              <div className="stat">
+                <div className="stat-label">Max</div>
+                <div className="stat-value">{stats.max != null ? stats.max : '–'}</div>
+              </div>
+            </div>
+            <div className="chart-wrap">
+              <div className="chart-card">
+                <div className="chart-actions">
+                  <button className="ghost" onClick={() => { try { chartRef.current?.resetZoom?.(); setRange(null); setSelected(null); } catch {} }}>Reset Zoom</button>
+                  <button className="ghost" onClick={() => toggleFullScreen(chartRef.current?.canvas?.parentElement)}>Fullscreen</button>
+                </div>
+                {/* Chart.js Chart wird direkt in den Canvas gerendert */}
+                <canvas ref={canvasRef}></canvas>
+              </div>
+            </div>
+            {/* Detailansicht bei Klick auf einen Punkt */}
+            {selected && (
+              <div className="entry featured" style={{ marginTop: 12 }}>
+                <div className="entry-left">
+                  <div className="entry-score" style={{ backgroundColor: 'rgba(0,0,0,0.06)' }}>
+                    <span style={{ color: colorForScore(selected.score) }}>{selected.score}</span>
+                  </div>
+                  <div className="entry-main">
+                    <div className="entry-meta">{new Date(selected.ts).toLocaleString('de-DE')}</div>
+                    <div className="entry-note">{selected.note || 'Kein Text vorhanden.'}</div>
+                  </div>
+                </div>
+                <button className="ghost" onClick={() => setSelected(null)}>Schließen</button>
+              </div>
+            )}
+          </section>
+          {/* Liste der letzten Einträge */}
+          <section className="card">
+            <h2>Letzte Einträge</h2>
+            <ul className="entries">
+              {entries.slice().reverse().slice(0, 20).map((e) => (
+                <li key={e.id} className={selected?.id === e.id ? 'entry selected' : 'entry'}>
+                  <div className="entry-left">
+                    <div className="entry-score" style={{ backgroundColor: 'rgba(0,0,0,0.06)' }}>
+                      <span style={{ color: colorForScore(e.score) }}>{e.score}</span>
+                    </div>
+                    <div className="entry-main">
+                      <div className="entry-meta">{new Date(e.created_ts).toLocaleString('de-DE')}</div>
+                      {e.note && <div className="entry-note">{e.note}</div>}
+                    </div>
+                  </div>
+                  <button className="ghost" onClick={() => onDelete(e.id)}>Löschen</button>
+                </li>
+              ))}
+            </ul>
+          </section>
+          <footer className="footer">
+            Läuft lokal – Daten werden im Browser gespeichert. Mit Mausrad/Pinch zoomen, mit Drag pannen.
+          </footer>
+        </div>
+      );
+    }
+
+    // Vollbildfunktion für das Chart: wechselt zwischen Vollbild und normalem Modus
+    function toggleFullScreen(el) {
+      if (!el) return;
+      const d = document;
+      if (!d.fullscreenElement && el.requestFullscreen) {
+        el.requestFullscreen().catch(() => {});
+      } else if (d.exitFullscreen) {
+        d.exitFullscreen().catch(() => {});
+      }
+    }
+
+    // Da react-chartjs-2 als UMD nicht zuverlässig verfügbar ist, erstellen wir die Chart.js
+    // Instanz direkt. Wir initialisieren die React‑App am Ende dieses Skripts.
+    ReactDOM.createRoot(document.getElementById('root')).render(<MoodTracker />);
+  </script>
+</body>
+</html>
